@@ -1,12 +1,11 @@
-# Dynamic Algorithm & Graph Visualizer (C + Python Integration)
+# TSP + Sorting Visualization and Expermintation (C + Python Integration)
 
 ---
 
 ### Student Details
-* **Student Name:** [Your Name Here]
-* **Student ID:** [Your ID Here]
-* **Course:** [Course Name / Code]
-* **University:** [University Name]
+* **Student Name:** [Omri Herzberg]
+* **Course:** [C/C++]
+* **University:** [HUJI]
 * **Date:** May 2026
 
 ---
@@ -43,8 +42,9 @@ ex_2_plus/
 │   └── py_ui/                   # Tkinter visualizer frontend & ctypes bridge
 ├── assets/                      # Node configurations & map graphic assets
 ├── tests/                       # Integration test files (Pytest compatible)
-├── build/                       # Compiled dynamic libraries (.dylib) & object files
+├── build/                       # Compiled dynamic libraries (.so / .dylib / .dll)
 ├── scripts/                     # Developer utility scripts
+├── compile.py                   # Cross-platform library compiler
 └── README.md                    # Project documentation & setup instructions
 ```
 
@@ -54,6 +54,16 @@ ex_2_plus/
 
 ### Prerequisite
 Ensure Python 3.11+ is installed on your machine.
+
+### Compile Shared Libraries
+Since dynamic C libraries are machine-dependent, you must compile the shared libraries on your machine prior to running the code. We have included an automated, cross-platform build script:
+```bash
+python3 compile.py
+```
+This script dynamically detects your OS (macOS, Linux, Windows) and compiles:
+* `build/libbuslines.<ext>`
+* `build/libtsp.<ext>`
+* `build/libvisualize.<ext>`
 
 ### Run the Application
 Start the main visualizer interface from the root directory:

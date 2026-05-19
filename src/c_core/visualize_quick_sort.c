@@ -102,6 +102,7 @@ void visualize_bus_quick_sort(BusLine *arr_start, BusLine *arr_end, BusLine *sta
     visualize_bus_quick_sort(arr_start, arr_end, pivot + 1, end, sort_type, depth + 1);
 }
 
+#ifdef STANDALONE
 int main() {
     // Array of 4 elements to clearly demonstrate quick sort partitioning
     BusLine arr[4] = {
@@ -126,3 +127,4 @@ int main() {
 
     return 0;
 }
+#endif

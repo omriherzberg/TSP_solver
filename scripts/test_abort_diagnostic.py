@@ -10,7 +10,11 @@ class BusStation(ctypes.Structure):
 
 TSP_CB = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int), ctypes.c_int, ctypes.c_double)
 
-lib = ctypes.CDLL(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build', 'libtsp.dylib'))
+import platform
+sys_name = platform.system()
+ext = "dll" if sys_name == "Windows" else ("dylib" if sys_name == "Darwin" else "so")
+
+lib = ctypes.CDLL(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build', f'libtsp.{ext}'))
 lib.tsp_brute_force.argtypes = [ctypes.POINTER(BusStation), ctypes.c_int, TSP_CB]; lib.tsp_brute_force.restype = None
 lib.tsp_christofides.argtypes = [ctypes.POINTER(BusStation), ctypes.c_int, TSP_CB]; lib.tsp_christofides.restype = None
 lib.tsp_greedy.argtypes = [ctypes.POINTER(BusStation), ctypes.c_int, TSP_CB]; lib.tsp_greedy.restype = None

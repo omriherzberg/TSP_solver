@@ -21,7 +21,11 @@ class BusStation(ctypes.Structure):
 CALLBACK_TYPE = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int), ctypes.c_int, ctypes.c_double)
 
 # Load library
-lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build', 'libtsp.dylib')
+import platform
+sys_name = platform.system()
+ext = "dll" if sys_name == "Windows" else ("dylib" if sys_name == "Darwin" else "so")
+
+lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build', f'libtsp.{ext}')
 tsp_lib = ctypes.CDLL(lib_path)
 
 tsp_lib.tsp_brute_force.argtypes = [ctypes.POINTER(BusStation), ctypes.c_int, CALLBACK_TYPE]

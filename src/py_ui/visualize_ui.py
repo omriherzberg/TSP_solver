@@ -26,9 +26,14 @@ class BusStation(ctypes.Structure):
 SORT_CALLBACK_TYPE = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int)
 TSP_CALLBACK_TYPE = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int), ctypes.c_int, ctypes.c_double)
 
+import platform
+
 lib_dir = os.path.dirname(os.path.abspath(__file__))
-viz_lib = ctypes.CDLL(os.path.abspath(os.path.join(lib_dir, '..', '..', 'build', 'libvisualize.dylib')))
-tsp_lib = ctypes.CDLL(os.path.abspath(os.path.join(lib_dir, '..', '..', 'build', 'libtsp.dylib')))
+sys_name = platform.system()
+ext = "dll" if sys_name == "Windows" else ("dylib" if sys_name == "Darwin" else "so")
+
+viz_lib = ctypes.CDLL(os.path.abspath(os.path.join(lib_dir, '..', '..', 'build', f'libvisualize.{ext}')))
+tsp_lib = ctypes.CDLL(os.path.abspath(os.path.join(lib_dir, '..', '..', 'build', f'libtsp.{ext}')))
 
 viz_lib.visualize_bubble_sort_c.argtypes = [ctypes.POINTER(BusLine), ctypes.POINTER(BusLine), SORT_CALLBACK_TYPE]
 viz_lib.visualize_bubble_sort_c.restype = None

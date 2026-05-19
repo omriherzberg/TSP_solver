@@ -72,6 +72,7 @@ void visualize_bus_bubble_sort(BusLine *start, BusLine *end) {
     print_visualization_state(start, end, NULL, NULL);
 }
 
+#ifdef STANDALONE
 int main() {
     // Create the exact example array discussed
     BusLine arr[3] = {
@@ -87,3 +88,4 @@ int main() {
 
     return 0;
 }
+#endif

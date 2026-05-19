@@ -17,7 +17,11 @@ DURATION = 1
 FREQUENCY = 2
 
 # 2. Load the library
-lib_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'build', 'libbuslines.dylib'))
+import platform
+sys_name = platform.system()
+ext = "dll" if sys_name == "Windows" else ("dylib" if sys_name == "Darwin" else "so")
+
+lib_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'build', f'libbuslines.{ext}'))
 try:
     bus_lib = ctypes.CDLL(lib_path)
 except OSError:
