@@ -3,6 +3,8 @@ import os
 import pytest
 import math
 import random
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src', 'py_ui'))
 from constants import *
 
 # 1. Map the C struct identically
@@ -19,7 +21,7 @@ class BusStation(ctypes.Structure):
 CALLBACK_TYPE = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int), ctypes.c_int, ctypes.c_double)
 
 # Load library
-lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'libtsp.dylib')
+lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'build', 'libtsp.dylib')
 tsp_lib = ctypes.CDLL(lib_path)
 
 tsp_lib.tsp_brute_force.argtypes = [ctypes.POINTER(BusStation), ctypes.c_int, CALLBACK_TYPE]

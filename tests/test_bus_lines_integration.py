@@ -1,4 +1,6 @@
 import pytest
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src', 'py_ui'))
 from main import process_buses
 
 # --- ORIGINAL TESTS ---

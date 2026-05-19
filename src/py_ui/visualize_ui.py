@@ -27,8 +27,8 @@ SORT_CALLBACK_TYPE = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.c_int, 
 TSP_CALLBACK_TYPE = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int), ctypes.c_int, ctypes.c_double)
 
 lib_dir = os.path.dirname(os.path.abspath(__file__))
-viz_lib = ctypes.CDLL(os.path.join(lib_dir, 'libvisualize.dylib'))
-tsp_lib = ctypes.CDLL(os.path.join(lib_dir, 'libtsp.dylib'))
+viz_lib = ctypes.CDLL(os.path.abspath(os.path.join(lib_dir, '..', '..', 'build', 'libvisualize.dylib')))
+tsp_lib = ctypes.CDLL(os.path.abspath(os.path.join(lib_dir, '..', '..', 'build', 'libtsp.dylib')))
 
 viz_lib.visualize_bubble_sort_c.argtypes = [ctypes.POINTER(BusLine), ctypes.POINTER(BusLine), SORT_CALLBACK_TYPE]
 viz_lib.visualize_bubble_sort_c.restype = None
@@ -1599,13 +1599,13 @@ class IsraelRoadTSPVisualizer(tk.Frame):
         
         # Load the background map image with 2x subsampling
         try:
-            self.bg_photo = tk.PhotoImage(file=os.path.join(lib_dir, "ramat_efal_map.png")).subsample(2, 2)
+            self.bg_photo = tk.PhotoImage(file=os.path.abspath(os.path.join(lib_dir, '..', '..', 'assets', "ramat_efal_map.png"))).subsample(2, 2)
         except Exception as e:
             print(f"Error loading map background: {e}")
             self.bg_photo = None
 
         import json
-        config_path = os.path.join(lib_dir, "ramat_efal_config.json")
+        config_path = os.path.abspath(os.path.join(lib_dir, '..', '..', 'assets', 'ramat_efal_config.json'))
         self.nodes = {}
         self.node_names = {}
         self.graph = {}
@@ -2252,7 +2252,7 @@ class IsraelRoadTSPVisualizer(tk.Frame):
     def _save_graph_to_file(self):
         import os, json
         lib_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(lib_dir, "ramat_efal_config.json")
+        config_path = os.path.abspath(os.path.join(lib_dir, '..', '..', 'assets', 'ramat_efal_config.json'))
         
         edges = set()
         for u in self.graph:

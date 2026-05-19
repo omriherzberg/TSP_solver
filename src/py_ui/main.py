@@ -17,7 +17,7 @@ DURATION = 1
 FREQUENCY = 2
 
 # 2. Load the library
-lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'libbuslines.dylib')
+lib_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'build', 'libbuslines.dylib'))
 try:
     bus_lib = ctypes.CDLL(lib_path)
 except OSError:

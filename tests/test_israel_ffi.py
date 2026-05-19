@@ -2,7 +2,7 @@ import ctypes
 import os
 
 lib_dir = os.path.dirname(os.path.abspath(__file__))
-israel_lib = ctypes.CDLL(os.path.join(lib_dir, 'libisrael.dylib'))
+israel_lib = ctypes.CDLL(os.path.join(lib_dir, '..', 'build', 'libisrael.dylib'))
 
 CALLBACK_TYPE = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int), ctypes.c_int, ctypes.c_double)
 
