@@ -725,7 +725,7 @@ class TSPVisualizer(tk.Frame):
                     
 
             elif event_type == 4:  # Christofides Stage 1: MST
-                print(f"[DEBUG UI] Received MST event. path_len={path_len}")
+
                 self._clear_stage_lines()
 
                 # Compute degree of every node from the MST edge list
@@ -805,7 +805,7 @@ class TSPVisualizer(tk.Frame):
 
             elif event_type == 5:  # Christofides Stage 2: MWPM
                 num_pairs = path_len // 2
-                print(f"[DEBUG UI] Received MWPM event. path_len={path_len}, num_pairs={num_pairs}")
+
                 for i in range(0, path_len - 1, 2):
                     n1 = path_ptr[i]
                     n2 = path_ptr[i+1]
