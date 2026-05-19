@@ -1,0 +1,14 @@
+{
+  "705": {
+    "Description": "\"Reduce preset configurations count to ~20 nodes\"",
+    "Instruction": "\"Update preset option dropdown list and load_preset configuration values to scale presets to 20 nodes.\"",
+    "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":108,\"ReplacementContent\":\"        self.preset_var = tk.StringVar(value=\\\"Load Preset...\\\")\\n        presets = [\\n            \\\"Load Preset...\\\",\\n            \\\"V-Trap (Fails NN)\\\",\\n            \\\"Dense Clusters (Fails Gree\n<truncated 4465 bytes>",
+    "TargetFile": "\"/Users/omriherzberg/Desktop/ex_2_plus/visualize_ui.py\""
+  },
+  "755": {
+    "Description": "\"Remove shines/fails from preset selection labels\"",
+    "Instruction": "\"Remove parenthesized hints from preset dropdown selection list and selection handling logic.\"",
+    "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":114,\"ReplacementContent\":\"        self.preset_var = tk.StringVar(value=\\\"Load Preset...\\\")\\n        presets = [\\n            \\\"Load Preset...\\\",\\n            \\\"V-Trap\\\",\\n            \\\"Dense Clusters\\\",\\n            \\\"Pent\n<truncated 4269 bytes>",
+    "TargetFile": "\"/Users/omriherzberg/Desktop/ex_2_plus/visualize_ui.py\""
+  }
+}

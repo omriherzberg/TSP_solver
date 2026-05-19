@@ -14,6 +14,10 @@ void reset_tsp_comparison_count(void) {
     tsp_comparison_count = 0;
 }
 
+void add_tsp_comparison_count(long long count) {
+    tsp_comparison_count += count;
+}
+
 double get_dist(BusStation a, BusStation b) {
     double dx = a.x - b.x;
     double dy = a.y - b.y;
@@ -29,7 +33,7 @@ int tsp_bf_recursive(BusStation* stations, int num_stations, int* current_path, 
         double total_cost = current_cost + get_dist(stations[current_path[num_stations-1]], stations[current_path[0]]);
         
         // Notify UI that a full path is being evaluated
-        if (cb && cb(1, current_path, num_stations, total_cost)) return 1;
+        if (cb && cb(EVENT_EVALUATING, current_path, num_stations, total_cost)) return 1;
 
         tsp_comparison_count++;
         if (total_cost < *min_cost) {
@@ -37,7 +41,7 @@ int tsp_bf_recursive(BusStation* stations, int num_stations, int* current_path, 
             for(int i = 0; i < num_stations; i++) best_path[i] = current_path[i];
             
             // Notify UI of a new global best
-            if (cb && cb(2, best_path, num_stations, total_cost)) return 1;
+            if (cb && cb(EVENT_PATH_CONFIRMED, best_path, num_stations, total_cost)) return 1;
         }
         return 0;
     }
@@ -60,7 +64,7 @@ int tsp_bf_recursive(BusStation* stations, int num_stations, int* current_path, 
 void tsp_brute_force(BusStation* stations, int num_stations, TspVizCallback cb) {
     reset_tsp_comparison_count();
     if (num_stations <= 1) {
-        if (cb) cb(3, NULL, 0, 0);
+        if (cb) cb(EVENT_DONE, NULL, 0, 0);
         return;
     }
 
@@ -75,7 +79,7 @@ void tsp_brute_force(BusStation* stations, int num_stations, TspVizCallback cb) 
     tsp_bf_recursive(stations, num_stations, current_path, 1, visited, 0.0, best_path, &min_cost, cb);
     
     // Send Done signal
-    if (cb) cb(3, best_path, num_stations, min_cost);
+    if (cb) cb(EVENT_DONE, best_path, num_stations, min_cost);
     
     free(current_path);
     free(best_path);
@@ -271,7 +275,7 @@ int* get_hamiltonian(int* tour, int tour_len, int n) {
 void tsp_christofides(BusStation* stations, int num_stations, TspVizCallback cb) {
     reset_tsp_comparison_count();
     if (num_stations <= 1) {
-        if (cb) cb(3, NULL, 0, 0);
+        if (cb) cb(EVENT_DONE, NULL, 0, 0);
         return;
     }
 
@@ -295,7 +299,7 @@ void tsp_christofides(BusStation* stations, int num_stations, TspVizCallback cb)
             mst_edges[idx++] = parent[i];
             mst_cost += dist[i][parent[i]];
         }
-        if (cb(4, mst_edges, idx, mst_cost)) { free(mst_edges); goto cleanup_all; }
+        if (cb(EVENT_MST_CONFIRMED, mst_edges, idx, mst_cost)) { free(mst_edges); goto cleanup_all; }
         free(mst_edges);
     }
     
@@ -304,7 +308,37 @@ void tsp_christofides(BusStation* stations, int num_stations, TspVizCallback cb)
     odds = get_odd_vertices(degrees, num_stations, &num_odds);
     
     // 3. MWPM
-    matching = get_mwpm(odds, num_odds, dist);
+    matching = malloc(num_odds * sizeof(int));
+    int delegated = 0;
+    if (cb) {
+        int* matching_payload = malloc(2 * num_odds * sizeof(int));
+        for (int i = 0; i < num_odds; i++) {
+            matching_payload[i] = odds[i];
+            matching_payload[num_odds + i] = -1;
+        }
+        
+        // Delegate exact matching to Python (EVENT_MWPM_DELEGATE)
+        if (cb(EVENT_MWPM_DELEGATE, matching_payload, num_odds, 0.0)) {
+            free(matching_payload);
+            free(matching);
+            goto cleanup_all;
+        }
+        
+        // Check if Python filled the matches correctly
+        if (matching_payload[num_odds] >= 0) {
+            for (int i = 0; i < num_odds; i++) {
+                matching[i] = matching_payload[num_odds + i];
+            }
+            delegated = 1;
+        }
+        free(matching_payload);
+    }
+    
+    if (!delegated) {
+        free(matching);
+        matching = get_mwpm(odds, num_odds, dist);
+    }
+
     if (cb) {
         int* mwpm_edges = malloc(num_odds * sizeof(int));
         int idx = 0;
@@ -319,7 +353,7 @@ void tsp_christofides(BusStation* stations, int num_stations, TspVizCallback cb)
                 matched_visited[matching[i]] = 1;
             }
         }
-        if (cb(5, mwpm_edges, idx, mwpm_cost)) { free(mwpm_edges); free(matched_visited); goto cleanup_all; }
+        if (cb(EVENT_MWPM_CONFIRMED, mwpm_edges, idx, mwpm_cost)) { free(mwpm_edges); free(matched_visited); goto cleanup_all; }
         free(mwpm_edges);
         free(matched_visited);
     }
@@ -343,11 +377,11 @@ void tsp_christofides(BusStation* stations, int num_stations, TspVizCallback cb)
     }
     total_cost += dist[path[num_stations-1]][path[0]];
     
-    if (cb) cb(2, path, num_stations, total_cost);
-
+    if (cb) cb(EVENT_PATH_CONFIRMED, path, num_stations, total_cost);
+ 
 cleanup_all:
     // Always fire Done — even on early abort — so Python can unlock the UI.
-    if (cb) cb(3, NULL, 0, 0);
+    if (cb) cb(EVENT_DONE, NULL, 0, 0);
     if (adj) {
         for (int i = 0; i < num_stations; i++) {
             EdgeNode* edge = adj[i];
@@ -377,7 +411,7 @@ cleanup_all:
 void tsp_nearest_neighbor(BusStation* stations, int num_stations, TspVizCallback cb) {
     reset_tsp_comparison_count();
     if (num_stations <= 1) {
-        if (cb) cb(3, NULL, 0, 0);
+        if (cb) cb(EVENT_DONE, NULL, 0, 0);
         return;
     }
 
@@ -399,7 +433,7 @@ void tsp_nearest_neighbor(BusStation* stations, int num_stations, TspVizCallback
                 double dist = get_dist(stations[current_node], stations[i]);
                 
                 path[step] = i;
-                if (cb && cb(1, path, step + 1, total_cost + dist)) { aborted = 1; break; }
+                if (cb && cb(EVENT_EVALUATING, path, step + 1, total_cost + dist)) { aborted = 1; break; }
 
                 tsp_comparison_count++;
                 if (dist < min_dist) {
@@ -415,21 +449,58 @@ void tsp_nearest_neighbor(BusStation* stations, int num_stations, TspVizCallback
             total_cost += min_dist;
             current_node = next_node;
             
-            if (cb && cb(2, path, step + 1, total_cost)) aborted = 1;
+            if (cb && cb(EVENT_PATH_CONFIRMED, path, step + 1, total_cost)) aborted = 1;
         }
     }
 
     if (!aborted) {
         // Complete cycle
         total_cost += get_dist(stations[current_node], stations[0]);
-        if (cb) cb(2, path, num_stations, total_cost);
+        if (cb) cb(EVENT_PATH_CONFIRMED, path, num_stations, total_cost);
     }
     
     // Always send Done — even after abort — so Python can unlock the UI.
-    if (cb) cb(3, NULL, 0, 0);
+    if (cb) cb(EVENT_DONE, NULL, 0, 0);
 
     free(path);
     free(visited);
+}
+
+// Random Path: just generates a random permutation of nodes.
+void tsp_random(BusStation* stations, int num_stations, TspVizCallback cb) {
+    reset_tsp_comparison_count();
+    if (num_stations <= 1) {
+        if (cb) cb(EVENT_DONE, NULL, 0, 0);
+        return;
+    }
+
+    int* path = malloc(sizeof(int) * num_stations);
+    for (int i = 0; i < num_stations; i++) {
+        path[i] = i;
+    }
+
+    // Shuffle using standard Fisher-Yates
+    int aborted = 0;
+    for (int i = num_stations - 1; i > 0 && !aborted; i--) {
+        int j = rand() % (i + 1);
+        int temp = path[i];
+        path[i] = path[j];
+        path[j] = temp;
+        
+        tsp_comparison_count++;
+        double current_cost = get_path_cost(stations, num_stations, path);
+        if (cb && cb(EVENT_EVALUATING, path, num_stations, current_cost)) {
+            aborted = 1;
+        }
+    }
+
+    if (!aborted) {
+        double final_cost = get_path_cost(stations, num_stations, path);
+        if (cb) cb(EVENT_PATH_CONFIRMED, path, num_stations, final_cost);
+    }
+
+    if (cb) cb(EVENT_DONE, NULL, 0, 0);
+    free(path);
 }
 
 // ---------------------------------------------------------
@@ -467,7 +538,7 @@ static void union_sets(int i, int j, int* parent) {
 void tsp_greedy(BusStation* stations, int num_stations, TspVizCallback cb) {
     reset_tsp_comparison_count();
     if (num_stations <= 1) {
-        if (cb) cb(3, NULL, 0, 0);
+        if (cb) cb(EVENT_DONE, NULL, 0, 0);
         return;
     }
 
@@ -501,7 +572,7 @@ void tsp_greedy(BusStation* stations, int num_stations, TspVizCallback cb) {
     double total_cost = 0;
     int aborted = 0;
 
-    // Packed pairs for visualization (event 6)
+    // Packed pairs for visualization (EVENT_GREEDY_EDGES)
     int* viz_edges = malloc(2 * num_stations * sizeof(int));
 
     for (int i = 0; i < num_edges && selected_count < num_stations && !aborted; i++) {
@@ -534,7 +605,7 @@ void tsp_greedy(BusStation* stations, int num_stations, TspVizCallback cb) {
         total_cost += w;
 
         // Emit current selected edges for visualization
-        if (cb && cb(6, viz_edges, 2 * selected_count, total_cost)) {
+        if (cb && cb(EVENT_GREEDY_EDGES, viz_edges, 2 * selected_count, total_cost)) {
             aborted = 1;
             break;
         }
@@ -554,11 +625,11 @@ void tsp_greedy(BusStation* stations, int num_stations, TspVizCallback cb) {
             curr = next;
         }
 
-        if (cb) cb(2, final_path, num_stations, total_cost);
+        if (cb) cb(EVENT_PATH_CONFIRMED, final_path, num_stations, total_cost);
         free(final_path);
     }
 
-    if (cb) cb(3, NULL, 0, 0);
+    if (cb) cb(EVENT_DONE, NULL, 0, 0);
 
     free(viz_edges);
     free(neighbor1);
@@ -708,7 +779,7 @@ void tsp_max_1_tree(BusStation* stations, int num_stations, TspVizCallback cb) {
             current_edges[idx++] = temp_parent[i];
         }
         
-        if (cb && cb(7, current_edges, idx, current_1_tree_cost)) {
+        if (cb && cb(EVENT_1TREE_EVALUATING, current_edges, idx, current_1_tree_cost)) {
             goto cleanup;
         }
         
@@ -719,10 +790,13 @@ void tsp_max_1_tree(BusStation* stations, int num_stations, TspVizCallback cb) {
     }
     
     if (max_lower_bound > 0 && cb) {
-        cb(8, best_edges, 2 * num_stations, max_lower_bound);
+        cb(EVENT_1TREE_CONFIRMED, best_edges, 2 * num_stations, max_lower_bound);
     }
     
 cleanup:
+    if (cb) {
+        cb(EVENT_DONE, NULL, 0, 0);
+    }
     free(temp_parent);
     free(current_edges);
     free(best_edges);
@@ -730,6 +804,251 @@ cleanup:
         free(dist[i]);
     }
     free(dist);
+}double get_path_cost(BusStation* stations, int num_stations, int* path) {
+    double cost = 0;
+    for (int i = 0; i < num_stations; i++) {
+        cost += get_dist(stations[path[i]], stations[path[(i + 1) % num_stations]]);
+    }
+    return cost;
 }
 
+// ---------------------------------------------------------
+// 6. LOCAL SEARCH OPTIMIZATIONS
+// ---------------------------------------------------------
+
+// Performs a 2-opt swap on path by reversing the sub-segment from i to j
+void two_opt_swap(int* path, int i, int j) {
+    while (i < j) {
+        int temp = path[i];
+        path[i] = path[j];
+        path[j] = temp;
+        i++;
+        j--;
+    }
+}
+
+// 2-Opt Local Search Engine
+double tsp_2opt(BusStation* stations, int num_stations, int* path, TspVizCallback cb) {
+    reset_tsp_comparison_count();
+    double current_cost = get_path_cost(stations, num_stations, path);
+    int improved = 1;
+    
+    while (improved) {
+        improved = 0;
+        
+        int best_i = -1;
+        int best_j = -1;
+        double max_reduction = 0.0;
+        
+        for (int i = 0; i < num_stations - 1; i++) {
+            for (int j = i + 1; j < num_stations; j++) {
+                // To avoid breaking the cycle, i cannot be 0 when j is num_stations - 1
+                if (i == 0 && j == num_stations - 1) continue;
+                
+                int u1 = path[i == 0 ? num_stations - 1 : i - 1];
+                int v1 = path[i];
+                int u2 = path[j];
+                int v2 = path[(j + 1) % num_stations];
+                
+                double old_dist = get_dist(stations[u1], stations[v1]) + get_dist(stations[u2], stations[v2]);
+                double new_dist = get_dist(stations[u1], stations[u2]) + get_dist(stations[v1], stations[v2]);
+                
+                int eval_arr[4] = {u1, v1, u2, v2};
+                if (cb && cb(EVENT_2OPT_EVALUATING, eval_arr, 4, current_cost)) {
+                    goto done;
+                }
+                
+                tsp_comparison_count++;
+                double reduction = old_dist - new_dist;
+                if (reduction > max_reduction + 1e-9) { // 1e-9 precision threshold
+                    max_reduction = reduction;
+                    best_i = i;
+                    best_j = j;
+                }
+            }
+        }
+        
+        if (best_i != -1) {
+            two_opt_swap(path, best_i, best_j);
+            current_cost = current_cost - max_reduction;
+            improved = 1;
+            
+            if (cb && cb(EVENT_2OPT_SWAP, path, num_stations, current_cost)) {
+                goto done;
+            }
+        }
+    }
+done:
+    if (cb) cb(EVENT_DONE, NULL, 0, 0);
+    return current_cost;
+}
+
+// Performs a 1-opt (node relocation)
+// Extracts node at index `from` and inserts it just before index `to`
+void one_opt_move(int* path, int num_stations, int from, int to) {
+    int extracted = path[from];
+    if (from < to) {
+        for (int i = from; i < to - 1; i++) {
+            path[i] = path[i + 1];
+        }
+        path[to - 1] = extracted;
+    } else {
+        for (int i = from; i > to; i--) {
+            path[i] = path[i - 1];
+        }
+        path[to] = extracted;
+    }
+}
+
+// 1-Opt Local Search Engine
+double tsp_1opt(BusStation* stations, int num_stations, int* path, TspVizCallback cb) {
+    reset_tsp_comparison_count();
+    double current_cost = get_path_cost(stations, num_stations, path);
+    int improved = 1;
+    
+    // Create a temporary path to evaluate moves
+    int* temp_path = malloc(num_stations * sizeof(int));
+    
+    while (improved) {
+        improved = 0;
+        
+        int best_from = -1;
+        int best_to = -1;
+        double max_reduction = 0.0;
+        
+        for (int i = 0; i < num_stations; i++) {
+            for (int j = 0; j < num_stations; j++) {
+                if (i == j || i == j - 1 || (i == num_stations - 1 && j == 0)) continue;
+                
+                memcpy(temp_path, path, num_stations * sizeof(int));
+                one_opt_move(temp_path, num_stations, i, j);
+                
+                double new_cost = get_path_cost(stations, num_stations, temp_path);
+                
+                int eval_arr[3] = {path[i], path[i == 0 ? num_stations - 1 : i - 1], path[(i + 1) % num_stations]};
+                if (cb && cb(EVENT_1OPT_EVALUATING, eval_arr, 3, current_cost)) {
+                    goto done_1opt;
+                }
+                
+                tsp_comparison_count++;
+                double reduction = current_cost - new_cost;
+                if (reduction > max_reduction + 1e-9) {
+                    max_reduction = reduction;
+                    best_from = i;
+                    best_to = j;
+                }
+            }
+        }
+        
+        if (best_from != -1) {
+            one_opt_move(path, num_stations, best_from, best_to);
+            current_cost = current_cost - max_reduction;
+            improved = 1;
+            
+            if (cb && cb(EVENT_1OPT_SWAP, path, num_stations, current_cost)) {
+                goto done_1opt;
+            }
+        }
+    }
+done_1opt:
+    free(temp_path);
+    if (cb) cb(EVENT_DONE, NULL, 0, 0);
+    return current_cost;
+}
+
+#include <time.h>
+#include <math.h>
+
+// Simulated Annealing Local Search Engine
+double tsp_simulated_annealing(BusStation* stations, int num_stations, int* path, TspVizCallback cb, double initial_temp_ratio, double cooling_rate) {
+    srand(time(NULL));
+    reset_tsp_comparison_count();
+    double current_cost = get_path_cost(stations, num_stations, path);
+    double T = current_cost * initial_temp_ratio;
+    if (T < 0.001) T = 0.001; // fallback minimum starting temp
+    double T_min = 0.0001;
+    double alpha = cooling_rate;
+    
+    // We also want to track the best tour we've seen so far!
+    int* best_path = malloc(num_stations * sizeof(int));
+    memcpy(best_path, path, num_stations * sizeof(int));
+    double best_cost = current_cost;
+    
+    int sa_eval_counter = 0;
+    while (T > T_min) {
+        int steps = num_stations * 5;
+        if (steps < 50) steps = 50;
+        
+        for (int step = 0; step < steps; step++) {
+            if (num_stations < 4) goto done_sa;
+            
+            // Choose two random distinct indices
+            int i = rand() % num_stations;
+            int j = rand() % num_stations;
+            if (i > j) {
+                int tmp = i; i = j; j = tmp;
+            }
+            
+            if (i == j || (i == 0 && j == num_stations - 1)) continue;
+            
+            int u1 = path[i == 0 ? num_stations - 1 : i - 1];
+            int v1 = path[i];
+            int u2 = path[j];
+            int v2 = path[(j + 1) % num_stations];
+            
+            double old_dist = get_dist(stations[u1], stations[v1]) + get_dist(stations[u2], stations[v2]);
+            double new_dist = get_dist(stations[u1], stations[u2]) + get_dist(stations[v1], stations[v2]);
+            double delta_E = new_dist - old_dist;
+            
+            int eval_arr[4] = {u1, v1, u2, v2};
+            
+            sa_eval_counter++;
+            // Throttle callback to every 200 evaluations in C to completely eliminate FFI overhead
+            if (sa_eval_counter % 200 == 0) {
+                if (cb) {
+                    int ret = cb(EVENT_SA_EVALUATING, eval_arr, 4, T);
+                    if (ret == 1) {
+                        goto done_sa;
+                    }
+                    // No need to dynamically update alpha via callback anymore, it's passed as arg
+                }
+            }
+            
+            tsp_comparison_count++;
+            
+            int accept = 0;
+            if (delta_E < 0.0) {
+                accept = 1;
+            } else {
+                double r = (double)rand() / RAND_MAX;
+                double prob = exp(-delta_E / T);
+                if (r < prob) {
+                    accept = 1;
+                }
+            }
+            
+            if (accept) {
+                two_opt_swap(path, i, j);
+                current_cost += delta_E;
+                
+                // Track best seen
+                if (current_cost < best_cost - 1e-9) {
+                    best_cost = current_cost;
+                    memcpy(best_path, path, num_stations * sizeof(int));
+                }
+                
+                if (cb && cb(EVENT_SA_SWAP, path, num_stations, current_cost)) {
+                    goto done_sa;
+                }
+            }
+        }
+        T *= alpha;
+    }
+done_sa:
+    // Copy the best overall path found back to the path array
+    memcpy(path, best_path, num_stations * sizeof(int));
+    free(best_path);
+    if (cb) cb(EVENT_DONE, path, num_stations, best_cost);
+    return best_cost;
+}
 
