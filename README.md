@@ -1,5 +1,6 @@
-# TSP + Sorting Visualization (C + Python Integration)
+# 🏆 Competition Submission
 
+# TSP + Sorting Visualization (C + Python Integration)
 ---
 
 ### Student Details
