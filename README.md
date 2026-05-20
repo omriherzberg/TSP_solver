@@ -1,5 +1,6 @@
 # TSP + Sorting Visualization and Expermintation (C + Python Integration)
 
+# SUBMITTING FOR THE COMPETETION
 ---
 
 ### Student Details
@@ -24,7 +25,8 @@ This project is an advanced, hybrid application integrating **highly optimized C
 * **Responsive Control Panel:** Decoupled asynchronous callback loop preventing Tkinter window freezing during high-compute algorithm loops.
 
 ### 2. Ramat Efal Friend's Router (Custom Topology Editor)
-* **Blank Canvas Startup:** Starts empty to build a road graph completely from scratch.
+* **Step-by-Step Algorithm Visualization:** Watch Nearest Neighbor, Greedy, and Christofides build their routes along real streets. Christofides shows the MST (green) and Matching (orange dashed) stages before the final tour.
+* **Performance Bar Chart:** Route Travel Cost panel displays a live bar chart comparing all algorithms that have been run, with 2-Opt savings shown as a purple stripe on top of its parent algorithm's bar.
 * **Interactive Graph Editing:** Double-click to place named nodes, click-and-drag to adjust, and `Shift + Click` to dynamically draw connections.
 * **Decoupled Configuration:** Read/write operations fully detached from the Python code and saved natively to a standalone `assets/ramat_efal_config.json` file.
 * **Quick Presets:** Custom 3-column quick-select layout bound to your designated interjunction coordinates.
@@ -63,6 +65,7 @@ python3 compile.py
 This script dynamically detects your OS (macOS, Linux, Windows) and compiles:
 * `build/libbuslines.<ext>`
 * `build/libtsp.<ext>`
+* `build/libefaltsp.<ext>`
 * `build/libvisualize.<ext>`
 
 ### Run the Application

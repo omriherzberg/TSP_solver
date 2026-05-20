@@ -1,6 +1,10 @@
 __pycache__/
 .idea/
 *.dylib
+*.so
+*.dll
+*.o
+build/
 bus_lines
 visualize_sort
 visualize_qsort

@@ -34,6 +34,10 @@ def compile_libraries():
             "src": ["tsp_solver.c"]
         },
         {
+            "out": f"libefaltsp.{ext}",
+            "src": ["efal_tsp_solver.c"]
+        },
+        {
             "out": f"libvisualize.{ext}",
             "src": ["visualize_lib.c", "visualize_bubble_sort.c", "visualize_quick_sort.c", "sort_bus_lines.c"]
         }

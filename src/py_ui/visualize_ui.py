@@ -34,6 +34,10 @@ ext = "dll" if sys_name == "Windows" else ("dylib" if sys_name == "Darwin" else 
 
 viz_lib = ctypes.CDLL(os.path.abspath(os.path.join(lib_dir, '..', '..', 'build', f'libvisualize.{ext}')))
 tsp_lib = ctypes.CDLL(os.path.abspath(os.path.join(lib_dir, '..', '..', 'build', f'libtsp.{ext}')))
+try:
+    efal_lib = ctypes.CDLL(os.path.abspath(os.path.join(lib_dir, '..', '..', 'build', f'libefaltsp.{ext}')))
+except OSError:
+    efal_lib = None
 
 viz_lib.visualize_bubble_sort_c.argtypes = [ctypes.POINTER(BusLine), ctypes.POINTER(BusLine), SORT_CALLBACK_TYPE]
 viz_lib.visualize_bubble_sort_c.restype = None
@@ -58,6 +62,17 @@ tsp_lib.tsp_max_1_tree.restype = None
 
 tsp_lib.tsp_1opt.argtypes = [ctypes.POINTER(BusStation), ctypes.c_int, ctypes.POINTER(ctypes.c_int), TSP_CALLBACK_TYPE]
 tsp_lib.tsp_1opt.restype = ctypes.c_double
+
+if efal_lib:
+    EFAL_FUNC_TYPE = [ctypes.POINTER(ctypes.c_double), ctypes.c_int, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_double), TSP_CALLBACK_TYPE]
+    efal_lib.efal_nearest_neighbor.argtypes = EFAL_FUNC_TYPE
+    efal_lib.efal_nearest_neighbor.restype = None
+    efal_lib.efal_greedy.argtypes = EFAL_FUNC_TYPE
+    efal_lib.efal_greedy.restype = None
+    efal_lib.efal_christofides.argtypes = EFAL_FUNC_TYPE
+    efal_lib.efal_christofides.restype = None
+    efal_lib.efal_brute_force.argtypes = EFAL_FUNC_TYPE
+    efal_lib.efal_brute_force.restype = None
 
 tsp_lib.tsp_2opt.argtypes = [ctypes.POINTER(BusStation), ctypes.c_int, ctypes.POINTER(ctypes.c_int), TSP_CALLBACK_TYPE]
 tsp_lib.tsp_2opt.restype = ctypes.c_double
@@ -107,8 +122,18 @@ class TSPVisualizer(tk.Frame):
         self.btn_reset_user = tk.Button(self.control_frame, text="Reset My Route", command=self.reset_user_route, font=("Helvetica", 12))
         self.btn_reset_user.pack(side=tk.LEFT, padx=10)
 
-        self.btn_random_route = tk.Button(self.control_frame, text="Generate Random Route", command=self.generate_random_route, font=("Helvetica", 12), fg="#ff9800")
-        self.btn_random_route.pack(side=tk.LEFT, padx=10)
+        # Presets
+        preset_frame = tk.Frame(self.control_frame, bg="#2b2b2b")
+        preset_frame.pack(side=tk.LEFT, padx=15)
+        tk.Label(preset_frame, text="Presets:", bg="#2b2b2b", fg="#ffd700", font=("Helvetica", 11, "bold")).pack(side=tk.LEFT, padx=2)
+        self.btn_random_route = tk.Button(preset_frame, text="Random Route", command=self.generate_random_route, font=("Helvetica", 10), fg="#ff9800")
+        self.btn_random_route.pack(side=tk.LEFT, padx=2)
+        self.btn_preset_circle = tk.Button(preset_frame, text="Circle", command=lambda: self.generate_map("circle"), font=("Helvetica", 10))
+        self.btn_preset_circle.pack(side=tk.LEFT, padx=2)
+        self.btn_preset_clusters = tk.Button(preset_frame, text="Clusters", command=lambda: self.generate_map("clusters"), font=("Helvetica", 10))
+        self.btn_preset_clusters.pack(side=tk.LEFT, padx=2)
+        self.btn_preset_grid = tk.Button(preset_frame, text="Grid", command=lambda: self.generate_map("grid"), font=("Helvetica", 10))
+        self.btn_preset_grid.pack(side=tk.LEFT, padx=2)
         
         # --- Algorithm Buttons with result labels ---
         self.algo_frame = tk.Frame(self, bg="#2b2b2b")
@@ -268,10 +293,13 @@ class TSPVisualizer(tk.Frame):
             self.wait_variable(var)
             elapsed += wait
 
-    def generate_map(self):
+    def generate_map(self, preset=None):
         if self.is_running: return
         
         try:
+            if preset:
+                val = 24 if preset == "grid" else 20
+                self.nodes_var.set(val)
             val = self.nodes_var.get()
             if val < 2: val = 2
             if val > 1000: val = 1000
@@ -290,18 +318,48 @@ class TSPVisualizer(tk.Frame):
         # Clear per-algo result labels since the map changed
         for lbl in self.algo_result_labels.values():
             lbl.config(text="")
-        self.info_label.config(text=f"Map Generated ({self.num_elements} nodes). Click nodes to play, or run algorithm.", fg="#a9b7c6")
+        
+        mode_text = f"Preset: {preset.title()}" if preset else "Random Map"
+        self.info_label.config(text=f"{mode_text} Generated ({self.num_elements} nodes). Click nodes to play, or run algorithm.", fg="#a9b7c6")
         self.btn_check.config(state=tk.DISABLED)
         
         ArrayType = BusStation * self.num_elements
         self.c_array = ArrayType()
         
         padding = 40
+        min_x, max_x = 380, self.canvas_width - padding
+        min_y, max_y = padding, self.canvas_height - padding
+        
         for i in range(self.num_elements):
             name = f"Stn {i}".encode('utf-8')
-            # Leave left 380px empty for the explanation cards and buttons
-            x = random.uniform(380, self.canvas_width - padding)
-            y = random.uniform(padding, self.canvas_height - padding)
+            
+            if preset == "circle":
+                angle = (2 * math.pi * i) / self.num_elements
+                radius = min((max_x - min_x) / 2, (max_y - min_y) / 2) - 20
+                cx, cy = min_x + (max_x - min_x) / 2, min_y + (max_y - min_y) / 2
+                x = cx + radius * math.cos(angle)
+                y = cy + radius * math.sin(angle)
+            elif preset == "clusters":
+                # 3 clusters
+                cluster = i % 3
+                if cluster == 0:
+                    cx, cy = min_x + 100, min_y + 100
+                elif cluster == 1:
+                    cx, cy = max_x - 100, min_y + 100
+                else:
+                    cx, cy = min_x + (max_x - min_x) / 2, max_y - 100
+                x = random.uniform(cx - 50, cx + 50)
+                y = random.uniform(cy - 50, cy + 50)
+            elif preset == "grid":
+                cols = math.ceil(math.sqrt(self.num_elements))
+                rows = math.ceil(self.num_elements / cols)
+                col = i % cols
+                row = i // cols
+                x = min_x + col * ((max_x - min_x) / max(1, cols - 1))
+                y = min_y + row * ((max_y - min_y) / max(1, rows - 1))
+            else:
+                x = random.uniform(min_x, max_x)
+                y = random.uniform(min_y, max_y)
             
             self.c_array[i].name = name
             self.c_array[i].x = x
@@ -667,8 +725,12 @@ class TSPVisualizer(tk.Frame):
                             fg="#a9b7c6"
                         )
                         if self.best_dist != float('inf') and path_ptr and path_len == self.num_elements:
-                            self._draw_algo_path(path_ptr, path_len, color="#ffc66d", width=2)
-                            self._show_distance_badge(f"Final ({self.current_algo})", self.best_dist, "#ffc66d")
+                            if "Opt Refinement" in self.current_algo:
+                                final_color = "#3498db" if self.best_dist < getattr(self, "init_dist", float('inf')) - 1e-5 else "#4CAF50"
+                            else:
+                                final_color = "#ffc66d"
+                            self._draw_algo_path(path_ptr, path_len, color=final_color, width=2)
+                            self._show_distance_badge(f"Final ({self.current_algo})", self.best_dist, final_color)
                             self.last_path = [path_ptr[idx] for idx in range(path_len)]
                         
                         if self.current_algo in self.algo_result_labels:
@@ -954,6 +1016,7 @@ class TSPVisualizer(tk.Frame):
                 self._show_distance_badge("2-Opt Swap", current_dist, "#8A2BE2")
                 self.info_label.config(text=f"[2-Opt Swap!] Dist: {current_dist:.2f} | Paths: {self.eval_count}")
                 self.update()
+                self.opt_just_swapped = True
                 if self.speed_slider.get() < 500:
                     self._interruptible_pause(300)
 
@@ -961,60 +1024,102 @@ class TSPVisualizer(tk.Frame):
                 self.best_dist = current_dist
                 self.last_path = [path_ptr[idx] for idx in range(path_len)]
                 self._clear_stage_lines()
-                self._draw_algo_path(path_ptr, path_len, color="#3498db", width=2)
-                self._show_distance_badge("1-Opt Move", current_dist, "#3498db")
+                self._draw_algo_path(path_ptr, path_len, color="#8A2BE2", width=2)
+                self._show_distance_badge("1-Opt Move", current_dist, "#8A2BE2")
                 self.info_label.config(text=f"[1-Opt Move!] Dist: {current_dist:.2f} | Paths: {self.eval_count}")
                 self.update()
+                self.opt_just_swapped = True
                 if self.speed_slider.get() < 500:
                     self._interruptible_pause(300)
 
             elif event_type == 12:  # EVENT_2OPT_EVALUATING
                 self.eval_count += 1
-                if self.eval_count % 100 == 0:
+                import time
+                if getattr(self, "opt_just_swapped", False):
+                    self.opt_just_swapped = False
+                    path_arr = (ctypes.c_int * len(self.last_path))(*self.last_path)
+                    self._draw_algo_path(path_arr, len(self.last_path), color="#4CAF50", width=2)
+                if self.eval_count % 200 == 0:
                     self.update()
                     if self.abort_requested:
                         self._clear_stage_lines()
                         return 1
-                self._clear_stage_lines()
-                for k in range(0, path_len - 1, 2):
-                    n1, n2 = path_ptr[k], path_ptr[k+1]
-                    x1, y1 = self.c_array[n1].x, self.c_array[n1].y
-                    x2, y2 = self.c_array[n2].x, self.c_array[n2].y
-                    line = self.canvas.create_line(x1, y1, x2, y2, fill="#FF4081", width=2, dash=(2, 2))
-                    self.stage_lines.append(line)
-                self.info_label.config(text=f"[2-Opt Evaluating] Dist: {current_dist:.2f} | Checked: {self.eval_count}")
-                self.update()
-                self.my_sleep()
+                        
+                speed = self.speed_slider.get()
+                now = time.time()
+                should_draw = False
+                
+                if speed < 1000:
+                    draw_throttle = 15 if speed >= 500 else (3 if speed >= 100 else 1)
+                    if self.eval_count % draw_throttle == 0:
+                        should_draw = True
+                else:
+                    if now - getattr(self, 'opt_last_draw', 0) > 0.033:
+                        should_draw = True
+                        
+                if should_draw:
+                    self._clear_stage_lines()
+                    for k in range(0, path_len - 1, 2):
+                        n1, n2 = path_ptr[k], path_ptr[k+1]
+                        x1, y1 = self.c_array[n1].x, self.c_array[n1].y
+                        x2, y2 = self.c_array[n2].x, self.c_array[n2].y
+                        line = self.canvas.create_line(x1, y1, x2, y2, fill="#FF4081", width=2, dash=(2, 2))
+                        self.stage_lines.append(line)
+                    self.info_label.config(text=f"[2-Opt Evaluating] Dist: {current_dist:.2f} | Checked: {self.eval_count}")
+                    self.update()
+                    time.sleep(0.005)
+                    self.my_sleep()
+                    self.opt_last_draw = time.time()
 
             elif event_type == 13:  # EVENT_1OPT_EVALUATING
                 self.eval_count += 1
-                if self.eval_count % 100 == 0:
+                import time
+                if getattr(self, "opt_just_swapped", False):
+                    self.opt_just_swapped = False
+                    path_arr = (ctypes.c_int * len(self.last_path))(*self.last_path)
+                    self._draw_algo_path(path_arr, len(self.last_path), color="#4CAF50", width=2)
+                if self.eval_count % 200 == 0:
                     self.update()
                     if self.abort_requested:
                         self._clear_stage_lines()
                         return 1
-                self._clear_stage_lines()
-                if path_len >= 3:
-                    node_idx = path_ptr[0]
-                    # Draw a gorgeous glowing aura around the node being relocated!
-                    nx, ny = self.c_array[node_idx].x, self.c_array[node_idx].y
-                    r_halo = 12
-                    halo = self.canvas.create_oval(nx-r_halo, ny-r_halo, nx+r_halo, ny+r_halo, outline="#FF4081", width=3)
-                    self.stage_lines.append(halo)
-                    
-                    # Draw predecessor and successor candidate/broken connections
-                    pred = path_ptr[1]
-                    succ = path_ptr[2]
-                    px, py = self.c_array[pred].x, self.c_array[pred].y
-                    sx, sy = self.c_array[succ].x, self.c_array[succ].y
-                    l1 = self.canvas.create_line(px, py, nx, ny, fill="#FF4081", width=1.5, dash=(2, 2))
-                    l2 = self.canvas.create_line(nx, ny, sx, sy, fill="#FF4081", width=1.5, dash=(2, 2))
-                    self.stage_lines.append(l1)
-                    self.stage_lines.append(l2)
-                    
-                self.info_label.config(text=f"[1-Opt Evaluating] Relocating node: {node_idx+1} | Checked: {self.eval_count}")
-                self.update()
-                self.my_sleep()
+                        
+                speed = self.speed_slider.get()
+                now = time.time()
+                should_draw = False
+                
+                if speed < 1000:
+                    draw_throttle = 15 if speed >= 500 else (3 if speed >= 100 else 1)
+                    if self.eval_count % draw_throttle == 0:
+                        should_draw = True
+                else:
+                    if now - getattr(self, 'opt_last_draw', 0) > 0.033:
+                        should_draw = True
+
+                if should_draw:
+                    self._clear_stage_lines()
+                    if path_len >= 3:
+                        node_idx = path_ptr[0]
+                        nx, ny = self.c_array[node_idx].x, self.c_array[node_idx].y
+                        r_halo = 12
+                        halo = self.canvas.create_oval(nx-r_halo, ny-r_halo, nx+r_halo, ny+r_halo, outline="#FF4081", width=3)
+                        self.stage_lines.append(halo)
+                        
+                        pred = path_ptr[1]
+                        succ = path_ptr[2]
+                        px, py = self.c_array[pred].x, self.c_array[pred].y
+                        sx, sy = self.c_array[succ].x, self.c_array[succ].y
+                        l1 = self.canvas.create_line(px, py, nx, ny, fill="#FF4081", width=1.5, dash=(2, 2))
+                        l2 = self.canvas.create_line(nx, ny, sx, sy, fill="#FF4081", width=1.5, dash=(2, 2))
+                        self.stage_lines.append(l1)
+                        self.stage_lines.append(l2)
+                        
+                    self.info_label.config(text=f"[1-Opt Evaluating] Relocating node: {node_idx+1} | Checked: {self.eval_count}")
+                    self.update()
+                    time.sleep(0.005)
+                    self.my_sleep()
+                    self.opt_last_draw = time.time()
+
 
             elif event_type == 15:  # EVENT_SA_EVALUATING (current_dist is the temperature T)
                 self.eval_count += 1
@@ -1196,6 +1301,9 @@ class TSPVisualizer(tk.Frame):
         self.btn_sa.config(state=tk.DISABLED)
         self.btn_regen.config(state=tk.DISABLED)
         self.btn_random_route.config(state=tk.DISABLED)
+        self.btn_preset_circle.config(state=tk.DISABLED)
+        self.btn_preset_clusters.config(state=tk.DISABLED)
+        self.btn_preset_grid.config(state=tk.DISABLED)
         self.nodes_spin.config(state=tk.DISABLED)
         self.eval_count = 0
         self.best_dist = float('inf')
@@ -1215,6 +1323,9 @@ class TSPVisualizer(tk.Frame):
         self.btn_sa.config(state=tk.NORMAL)
         self.btn_regen.config(state=tk.NORMAL)
         self.btn_random_route.config(state=tk.NORMAL)
+        self.btn_preset_circle.config(state=tk.NORMAL)
+        self.btn_preset_clusters.config(state=tk.NORMAL)
+        self.btn_preset_grid.config(state=tk.NORMAL)
         self.nodes_spin.config(state=tk.NORMAL)
         self.is_running = False
 
@@ -1263,6 +1374,7 @@ class TSPVisualizer(tk.Frame):
             init_dist += (dx*dx + dy*dy)**0.5
 
         if not self._prepare_run(): return
+        self.init_dist = init_dist
         self.best_dist = init_dist
 
         # Draw the initial path before starting optimization
@@ -1292,6 +1404,7 @@ class TSPVisualizer(tk.Frame):
             init_dist += (dx*dx + dy*dy)**0.5
 
         if not self._prepare_run(): return
+        self.init_dist = init_dist
         self.best_dist = init_dist
 
         # Draw the initial path before starting optimization
@@ -1587,7 +1700,7 @@ class SortVisualizer(tk.Frame):
         self._finish_run()
 
 
-class IsraelRoadTSPVisualizer(tk.Frame):
+class EfalRoadTSPVisualizer(tk.Frame):
     MAP_W = 373
     MAP_H = 512
 
@@ -1601,6 +1714,8 @@ class IsraelRoadTSPVisualizer(tk.Frame):
         self.is_running = False
         self.edit_mode = False
         self.connect_node_start = None
+        self.algo_costs = {}  # algo_key -> meters
+        self.c_callback = TSP_CALLBACK_TYPE(self._on_efal_cb)
         
         # Load the background map image with 2x subsampling
         try:
@@ -1608,6 +1723,8 @@ class IsraelRoadTSPVisualizer(tk.Frame):
         except Exception as e:
             print(f"Error loading map background: {e}")
             self.bg_photo = None
+        
+        self._path_cache = {}
 
         import json
         config_path = os.path.abspath(os.path.join(lib_dir, '..', '..', 'assets', 'ramat_efal_config.json'))
@@ -1645,7 +1762,7 @@ class IsraelRoadTSPVisualizer(tk.Frame):
         from tkinter import ttk
         top = tk.Frame(self, bg="#1e1e2e")
         top.pack(fill=tk.X, padx=10, pady=(8, 0))
-        tk.Label(top, text="📍 Ramat Efal Friend's Router",
+        tk.Label(top, text="📍 Efal Road Friend's Router",
                  font=("Helvetica", 18, "bold"), bg="#1e1e2e", fg="#ffd700").pack(side=tk.LEFT)
         self.info_lbl = tk.Label(top, text="Click on the map to place pins representing your friends' houses!",
                                  font=("Helvetica", 11), bg="#1e1e2e", fg="#a9b7c6")
@@ -1732,6 +1849,8 @@ class IsraelRoadTSPVisualizer(tk.Frame):
         self.lbl_primary.pack()
         self.lbl_secondary = tk.Label(rf, text="", font=("Courier", 11), bg="#1e1e2e", fg="#a9b7c6")
         self.lbl_secondary.pack()
+        self.perf_canvas = tk.Canvas(rf, bg="#12171e", height=130, highlightthickness=0)
+        self.perf_canvas.pack(fill=tk.X, pady=(6, 0))
 
         # RIGHT COLUMN ELEMENTS: Algorithms & Tour Sequence
         af = tk.LabelFrame(right_col, text="TSP Algorithms", font=("Helvetica", 11, "bold"),
@@ -1749,13 +1868,15 @@ class IsraelRoadTSPVisualizer(tk.Frame):
 
         self.lbl_nn    = algo_col(af, "1. Nearest Neighbor (Topological)", "O(N²)",     self._run_nn,     "#4CAF50")
         self.lbl_gr    = algo_col(af, "2. Greedy Edge-Insertion",        "O(N²logN)", self._run_greedy, "#E91E63")
+        self.lbl_ch    = algo_col(af, "3. Christofides (MST+MWPM)",      "O(N³)",     self._run_christofides, "#03A9F4")
+        self.lbl_bf    = algo_col(af, "4. Brute Force Exact Solver",     "O(N!)",     self._run_brute_force, "#ffc66d")
         self.lbl_2opt  = algo_col(af, "Optimize: 2-Opt refinement",      "O(N²)",     self._run_2opt,   "#8A2BE2")
 
         cf = tk.LabelFrame(right_col, text="Optimal Path Sequence", font=("Helvetica", 11, "bold"),
                            bg="#1e1e2e", fg="#ffd700", padx=8, pady=4)
         cf.pack(fill=tk.BOTH, expand=True, pady=(0, 4))
-        self.tour_text = tk.Text(cf, font=("Courier", 9), bg="#12171e", fg="#a9b7c6",
-                                 height=4, width=32, state=tk.DISABLED, relief=tk.FLAT)
+        self.tour_text = tk.Text(cf, font=("Courier", 13), bg="#12171e", fg="#a9b7c6",
+                                 height=8, width=32, state=tk.DISABLED, relief=tk.FLAT)
         self.tour_text.pack(fill=tk.BOTH, expand=True)
 
         # --- TAB 2: GRAPH EDITOR ---
@@ -1796,7 +1917,7 @@ class IsraelRoadTSPVisualizer(tk.Frame):
             self.pinned_nodes.append(best_node)
             self._clear_metrics()
             self._draw_base_map()
-            self.info_lbl.config(text=f"Pinned location: {self.node_names[best_node]}!")
+            self.info_lbl.config(text=f"Pinned location: {self.get_node_name(best_node)}!")
         else:
             self.info_lbl.config(text="Please click closer to a visible street or junction!")
 
@@ -1811,7 +1932,16 @@ class IsraelRoadTSPVisualizer(tk.Frame):
         self.pinned_nodes.append(node_id)
         self._clear_metrics()
         self._draw_base_map()
-        self.info_lbl.config(text=f"Added Preset: {self.node_names.get(node_id, f'Node {node_id}')}!")
+        self.info_lbl.config(text=f"Added Preset: {self.get_node_name(node_id)}!")
+
+    def get_node_name(self, nid):
+        preset_names = {
+            0: "Entry", 7: "Samoha", 10: "Kelman", 27: "Carrefour", 52: "Harpaz",
+            34: "My house", 21: "Berlo", 58: "Shula", 4: "MeatBar", 57: "Ohad",
+            48: "Zofim", 44: "Laser", 47: "Katz", 8: "Bialik", 55: "Helmaan",
+            25: "Leyhman", 35: "Pincher"
+        }
+        return preset_names.get(nid, self.node_names.get(nid, f"Node {nid}"))
 
     def _clear_entire_graph(self):
         import tkinter.messagebox as messagebox
@@ -1821,19 +1951,26 @@ class IsraelRoadTSPVisualizer(tk.Frame):
             self.graph = {}
             self.pinned_nodes = []
             self.current_tour = None
+            self._path_cache = {}
             self._clear_metrics()
             self._draw_base_map()
             self.info_lbl.config(text="Graph completely cleared. Toggle Edit Mode to add nodes.")
 
     def _clear_metrics(self):
+        self.current_tour = None
+        self.algo_costs = {}
+        self._last_construction_algo = None
         self.lbl_nn.config(text="")
         self.lbl_gr.config(text="")
+        self.lbl_ch.config(text="")
+        self.lbl_bf.config(text="")
         self.lbl_2opt.config(text="")
         self.lbl_primary.config(text="—")
         self.lbl_secondary.config(text="")
         self.tour_text.config(state=tk.NORMAL)
         self.tour_text.delete("1.0", tk.END)
         self.tour_text.config(state=tk.DISABLED)
+        self._update_perf_chart()
 
     def _clear_pins(self):
         if self.is_running: return
@@ -1849,30 +1986,54 @@ class IsraelRoadTSPVisualizer(tk.Frame):
         self.info_lbl.config(text="All pins cleared. Click the map to add homes!")
 
     def get_shortest_path(self, start, end):
+        if not hasattr(self, '_path_cache'):
+            self._path_cache = {}
+        
         if start == end:
             return [start], 0.0
-        dist = {i: float('inf') for i in self.nodes.keys()}
-        prev = {i: None for i in self.nodes.keys()}
-        dist[start] = 0.0
-        Q = list(self.nodes.keys())
-        while Q:
-            u = min(Q, key=lambda n: dist[n])
-            Q.remove(u)
+            
+        cache_key = (start, end)
+        if cache_key in self._path_cache:
+            return self._path_cache[cache_key]
+        cache_key_rev = (end, start)
+        if cache_key_rev in self._path_cache:
+            path, dist = self._path_cache[cache_key_rev]
+            return list(reversed(path)), dist
+
+        import heapq
+        dist = {start: 0.0}
+        prev = {start: None}
+        pq = [(0.0, start)]
+        visited = set()
+        
+        while pq:
+            d, u = heapq.heappop(pq)
+            if u in visited:
+                continue
+            visited.add(u)
+            
             if u == end:
                 break
+                
             for v, weight in self.graph[u]:
-                alt = dist[u] + weight
-                if alt < dist[v]:
+                alt = d + weight
+                if alt < dist.get(v, float('inf')):
                     dist[v] = alt
                     prev[v] = u
-        
+                    heapq.heappush(pq, (alt, v))
+                    
+        if end not in prev:
+            return [], float('inf')
+            
         path = []
         curr = end
         while curr is not None:
             path.append(curr)
             curr = prev[curr]
         path.reverse()
-        return path, dist[end]
+        
+        self._path_cache[cache_key] = (path, dist.get(end, float('inf')))
+        return path, dist.get(end, float('inf'))
 
     def _draw_base_map(self):
         self.canvas.delete("all")
@@ -1904,9 +2065,56 @@ class IsraelRoadTSPVisualizer(tk.Frame):
                                     fill="", outline="#ff9f43", width=2, tags="pin_pulse")
             self.canvas.create_oval(pos[0]-7, pos[1]-7, pos[0]+7, pos[1]+7,
                                     fill="#ff9f43", outline="#ffffff", width=1.5, tags="pin")
-            self.canvas.create_text(pos[0]+13, pos[1], text=f"{idx+1}. {self.node_names[node_id]}",
+            self.canvas.create_text(pos[0]+13, pos[1], text=f"{idx+1}",
                                     font=("Helvetica", 8, "bold"), fill="#ffffff",
                                     anchor=tk.W, tags="pin_lbl")
+
+    def _on_efal_cb(self, event_type, path_ptr, path_len, current_dist):
+        if event_type == 1:
+            pass # Brute force too fast to visualize every edge, skip
+        elif event_type == 2:
+            u, v = self.pinned_nodes[path_ptr[0]], self.pinned_nodes[path_ptr[1]]
+            path, _ = self.get_shortest_path(u, v)
+            coords = []
+            for nid in path:
+                pos = self.nodes[nid]
+                coords.extend([pos[0], pos[1]])
+            if len(coords) >= 4:
+                line = self.canvas.create_line(*coords, fill="#FF4081", width=3, smooth=False)
+                self.stage_lines.append(line)
+            self.info_lbl.config(text=f"Evaluating road segment... Dist: {current_dist:.2f}")
+            self.update()
+            self._interruptible_pause(300)
+        elif event_type == 4:
+            self._clear_stage_lines()
+            for i in range(0, path_len - 1, 2):
+                u, v = self.pinned_nodes[path_ptr[i]], self.pinned_nodes[path_ptr[i+1]]
+                path, _ = self.get_shortest_path(u, v)
+                coords = []
+                for nid in path:
+                    pos = self.nodes[nid]
+                    coords.extend([pos[0], pos[1]])
+                if len(coords) >= 4:
+                    line = self.canvas.create_line(*coords, fill="#2ecc71", width=2.5, smooth=False)
+                    self.stage_lines.append(line)
+            self.info_lbl.config(text=f"Christofides Stage 1: Minimum Spanning Tree (Cost: {current_dist:.2f})")
+            self.update()
+            self._interruptible_pause(1000)
+        elif event_type == 5:
+            for i in range(0, path_len - 1, 2):
+                u, v = self.pinned_nodes[path_ptr[i]], self.pinned_nodes[path_ptr[i+1]]
+                path, _ = self.get_shortest_path(u, v)
+                coords = []
+                for nid in path:
+                    pos = self.nodes[nid]
+                    coords.extend([pos[0], pos[1]])
+                if len(coords) >= 4:
+                    line = self.canvas.create_line(*coords, fill="#FF5722", width=2, dash=(4, 3), smooth=False)
+                    self.stage_lines.append(line)
+            self.info_lbl.config(text=f"Christofides Stage 2: Odd Vertex Matching (Cost: {current_dist:.2f})")
+            self.update()
+            self._interruptible_pause(1500)
+        return 0
 
     def _animate_tour(self, tour, color, step=0):
         if self._anim_id:
@@ -1939,16 +2147,111 @@ class IsraelRoadTSPVisualizer(tk.Frame):
         primary = f"{scaled_dist_meters:.0f} meters"
         secondary = f"approx. {scaled_dist_meters/1000:.2f} km driving"
         
+        # Track per-algo cost for chart
+        if lbl == self.lbl_nn:
+            self.algo_costs["NN"] = (scaled_dist_meters, None)
+            self._last_construction_algo = "NN"
+        elif lbl == self.lbl_gr:
+            self.algo_costs["Greedy"] = (scaled_dist_meters, None)
+            self._last_construction_algo = "Greedy"
+        elif lbl == self.lbl_ch:
+            self.algo_costs["Christofides"] = (scaled_dist_meters, None)
+            self._last_construction_algo = "Christofides"
+        elif lbl == self.lbl_bf:
+            self.algo_costs["BruteForce"] = (scaled_dist_meters, None)
+            self._last_construction_algo = "BruteForce"
+        elif lbl == self.lbl_2opt:
+            base = getattr(self, "_last_construction_algo", None)
+            if base and base in self.algo_costs:
+                orig_cost, _ = self.algo_costs[base]
+                self.algo_costs[base] = (orig_cost, scaled_dist_meters)
+        
         lbl.config(text=primary)
         self.lbl_primary.config(text=primary)
         self.lbl_secondary.config(text=secondary)
+        self._update_perf_chart()
         
         self.tour_text.config(state=tk.NORMAL)
         self.tour_text.delete("1.0", tk.END)
         for i, nid in enumerate(tour):
-            self.tour_text.insert(tk.END, f"{i+1:2}. {self.node_names[nid]}\n")
-        self.tour_text.insert(tk.END, f" ↩ {self.node_names[tour[0]]}")
+            self.tour_text.insert(tk.END, f"{i+1:2}. {self.get_node_name(nid)}\n")
+        self.tour_text.insert(tk.END, f" ↩ {self.get_node_name(tour[0])}")
         self.tour_text.config(state=tk.DISABLED)
+
+    def _update_perf_chart(self):
+        c = self.perf_canvas
+        c.delete("all")
+        costs = getattr(self, "algo_costs", {})
+        if not costs:
+            c.update_idletasks()
+            W = c.winfo_width() or 220
+            c.create_text(W // 2, 65, text="Run algorithms to compare",
+                          fill="#555", font=("Helvetica", 9))
+            return
+
+        ALGO_ORDER = [
+            ("NN",          "#4CAF50"),
+            ("Greedy",      "#E91E63"),
+            ("Christofides","#03A9F4"),
+            ("BruteForce",  "#ffc66d"),
+        ]
+        present = [(name, col) for name, col in ALGO_ORDER if name in costs]
+        if not present:
+            return
+
+        c.update_idletasks()
+        W = c.winfo_width() or 220
+        H = 130
+        PAD_L, PAD_R, PAD_T, PAD_B = 8, 8, 12, 22
+        n = len(present)
+        total_bar_space = W - PAD_L - PAD_R
+        bar_w = max(14, total_bar_space // n - 8)
+        gap = (total_bar_space - n * bar_w) // (n + 1)
+        chart_h = H - PAD_T - PAD_B
+
+        # Baseline = max of all original costs
+        max_v = max(orig for orig, _ in costs.values())
+        if max_v == 0:
+            return
+
+        for idx, (name, col) in enumerate(present):
+            orig, opt = costs[name]
+            bar_h = max(4, int(chart_h * orig / max_v))
+            x0 = PAD_L + gap * (idx + 1) + bar_w * idx
+            x1 = x0 + bar_w
+            y_bot = H - PAD_B
+            y_top = y_bot - bar_h
+
+            # Main bar (original cost)
+            c.create_rectangle(x0, y_top, x1, y_bot, fill=col, outline="#1e1e2e", width=1)
+
+            # 2-Opt savings overlay — darker stripe on top portion
+            if opt is not None and opt < orig:
+                saved_h = max(2, int(chart_h * (orig - opt) / max_v))
+                c.create_rectangle(x0, y_top, x1, y_top + saved_h,
+                                   fill="#8A2BE2", outline="")
+                # Dashed savings label
+                save_pct = int(100 * (orig - opt) / orig)
+                c.create_text((x0 + x1) // 2, y_top + saved_h // 2,
+                              text=f"-{save_pct}%", fill="#ffffff",
+                              font=("Helvetica", 7, "bold"))
+
+            # Value label above bar
+            c.create_text((x0 + x1) // 2, y_top - 2, text=f"{int(orig)}m",
+                          fill="#cccccc", font=("Helvetica", 7), anchor="s")
+
+            # Name label below
+            short = {"Christofides": "Chris", "BruteForce": "Brute"}.get(name, name)
+            c.create_text((x0 + x1) // 2, H - PAD_B + 3, text=short,
+                          fill=col, font=("Helvetica", 7, "bold"), anchor="n")
+
+        # Legend for 2-opt if any savings shown
+        any_opt = any(opt is not None for _, opt in costs.values())
+        if any_opt:
+            lx = PAD_L
+            c.create_rectangle(lx, H - 8, lx + 8, H, fill="#8A2BE2", outline="")
+            c.create_text(lx + 10, H - 4, text="= 2-Opt savings",
+                          fill="#8A2BE2", font=("Helvetica", 7), anchor="w")
 
     def _interruptible_pause(self, ms):
         elapsed = 0
@@ -1971,143 +2274,83 @@ class IsraelRoadTSPVisualizer(tk.Frame):
             self.canvas.delete(line)
         self.path_lines = []
 
-    def _run_nn(self):
-        if len(self.pinned_nodes) < 2:
-            self.info_lbl.config(text="Add at least 2 locations first!")
-            return
-        if self.is_running: return
-        self.is_running = True
-        
-        self._clear_stage_lines()
-        self._clear_path_lines()
-        self._draw_base_map()
-        
-        unvisited = list(self.pinned_nodes[1:])
-        tour = [self.pinned_nodes[0]]
-        total_cost = 0.0
-        
-        while unvisited:
-            curr = tour[-1]
-            best_next = None
-            best_dist = float('inf')
-            for node in unvisited:
-                _, d = self.get_shortest_path(curr, node)
-                if d < best_dist:
-                    best_dist = d
-                    best_next = node
-            
-            # Show progressive street route segment
-            path, _ = self.get_shortest_path(curr, best_next)
-            coords = []
-            for nid in path:
-                pos = self.nodes[nid]
-                coords.extend([pos[0], pos[1]])
-            if len(coords) >= 4:
-                line = self.canvas.create_line(*coords, fill="#4CAF50", width=3, smooth=False)
-                self.stage_lines.append(line)
-            
-            tour.append(best_next)
-            unvisited.remove(best_next)
-            total_cost += best_dist
-            self.info_lbl.config(text=f"[Nearest Neighbor] Connected {len(tour)} / {len(self.pinned_nodes)} houses...")
-            self.update()
-            self._interruptible_pause(300)
-            
-        _, final_d = self.get_shortest_path(tour[-1], tour[0])
-        total_cost += final_d
-        
-        self._clear_stage_lines()
-        self._animate_tour(tour, "#4CAF50")
-        self._update_results(self.lbl_nn, tour, total_cost)
-        self.info_lbl.config(text="Nearest Neighbor routing solved successfully!")
-        self.is_running = False
-        self.edit_mode = False
-        self.connect_node_start = None
-
-    def _run_greedy(self):
-        if len(self.pinned_nodes) < 2:
-            self.info_lbl.config(text="Add at least 2 locations first!")
-            return
-        if self.is_running: return
-        self.is_running = True
-        
-        self._clear_stage_lines()
-        self._clear_path_lines()
-        self._draw_base_map()
-        
-        edges = []
+    def _build_dist_matrix(self):
         N = len(self.pinned_nodes)
+        matrix = (ctypes.c_double * (N * N))()
         for i in range(N):
-            for j in range(i+1, N):
-                u = self.pinned_nodes[i]
-                v = self.pinned_nodes[j]
-                _, d = self.get_shortest_path(u, v)
-                edges.append((d, u, v))
-        edges.sort()
+            for j in range(N):
+                if i == j:
+                    matrix[i * N + j] = 0.0
+                else:
+                    _, d = self.get_shortest_path(self.pinned_nodes[i], self.pinned_nodes[j])
+                    matrix[i * N + j] = d
+        return matrix, N
+
+    def _run_efal_c_algo(self, algo_func, label_ui, algo_name, color):
+        if not efal_lib:
+            self.info_lbl.config(text="C engine libefaltsp not found! Compile it first.")
+            return
+        if len(self.pinned_nodes) < 2:
+            self.info_lbl.config(text="Add at least 2 locations first!")
+            return
+        if self.is_running: return
+        self.is_running = True
         
-        degree = {node: 0 for node in self.pinned_nodes}
-        parent = {node: node for node in self.pinned_nodes}
+        self._clear_stage_lines()
+        self._clear_path_lines()
+        self._draw_base_map()
         
-        def find(x):
-            while parent[x] != x:
-                parent[x] = parent[parent[x]]
-                x = parent[x]
-            return x
+        self.info_lbl.config(text=f"Computing distance matrix for {algo_name}...")
+        self.update()
         
-        selected = []
-        total_cost = 0.0
+        dist_matrix, N = self._build_dist_matrix()
+        out_path = (ctypes.c_int * N)()
+        out_cost = ctypes.c_double(0.0)
         
-        for cost, u, v in edges:
-            if degree[u] >= 2 or degree[v] >= 2:
-                continue
-            if len(selected) < N - 1 and find(u) == find(v):
-                continue
-            
-            degree[u] += 1
-            degree[v] += 1
-            parent[find(u)] = find(v)
-            selected.append((u, v))
-            total_cost += cost
-            
-            # Show edge highlighted along streets
+        self.info_lbl.config(text=f"Running {algo_name} via C Engine...")
+        self.update()
+        
+        algo_func(dist_matrix, N, out_path, ctypes.byref(out_cost), self.c_callback)
+        
+        self._clear_stage_lines()
+        tour = [self.pinned_nodes[out_path[i]] for i in range(N)]
+        
+        for i in range(len(tour)):
+            u = tour[i]
+            v = tour[(i + 1) % len(tour)]
             path, _ = self.get_shortest_path(u, v)
             coords = []
             for nid in path:
                 pos = self.nodes[nid]
                 coords.extend([pos[0], pos[1]])
             if len(coords) >= 4:
-                line = self.canvas.create_line(*coords, fill="#E91E63", width=3, smooth=False)
-                self.stage_lines.append(line)
-            
-            self.info_lbl.config(text=f"[Greedy Edges] Selected {len(selected)} / {N} path links...")
-            self.update()
-            self._interruptible_pause(350)
-            
-        # Complete tour loop reconstruction
-        adj = {node: [] for node in self.pinned_nodes}
-        for u, v in selected:
-            adj[u].append(v)
-            adj[v].append(u)
-            
-        tour = []
-        visited = set()
-        curr = self.pinned_nodes[0]
-        for _ in range(N):
-            tour.append(curr)
-            visited.add(curr)
-            next_nodes = [n for n in adj[curr] if n not in visited]
-            if next_nodes:
-                curr = next_nodes[0]
-            else:
-                break
+                line = self.canvas.create_line(*coords, fill=color, width=3.5, smooth=False, tags="tour_line")
+                self.path_lines.append(line)
                 
-        self._clear_stage_lines()
-        self._animate_tour(tour, "#E91E63")
-        self._update_results(self.lbl_gr, tour, total_cost)
-        self.info_lbl.config(text="Greedy edge routing completed successfully!")
+        self.canvas.tag_raise("pin")
+        self.canvas.tag_raise("pin_lbl")
+        
+        self._update_results(label_ui, tour, out_cost.value)
+        self.info_lbl.config(text=f"{algo_name} solved successfully!")
+        
         self.is_running = False
         self.edit_mode = False
         self.connect_node_start = None
+
+    def _run_nn(self):
+        self._run_efal_c_algo(efal_lib.efal_nearest_neighbor, self.lbl_nn, "Nearest Neighbor", "#4CAF50")
+
+    def _run_greedy(self):
+        self._run_efal_c_algo(efal_lib.efal_greedy, self.lbl_gr, "Greedy Edge-Insertion", "#E91E63")
+
+    def _run_christofides(self):
+        self._run_efal_c_algo(efal_lib.efal_christofides, self.lbl_ch, "Christofides", "#03A9F4")
+
+    def _run_brute_force(self):
+        if len(self.pinned_nodes) > 12:
+            self.info_lbl.config(text="Too many nodes for Brute Force! Max 12 recommended.")
+            return
+        self._run_efal_c_algo(efal_lib.efal_brute_force, self.lbl_bf, "Brute Force", "#ffc66d")
 
     def _run_2opt(self):
         if not self.current_tour or len(self.current_tour) < 3:
@@ -2131,7 +2374,7 @@ class IsraelRoadTSPVisualizer(tk.Frame):
         self._animate_tour(tour, "#8A2BE2")
         
         passes = 0
-        while improved and passes < 1:
+        while improved and passes < 100:
             improved = False
             passes += 1
             for i in range(N - 1):
@@ -2155,14 +2398,29 @@ class IsraelRoadTSPVisualizer(tk.Frame):
                         cost = cost - db + da
                         improved = True
                         
+                        if self._anim_id:
+                            self.after_cancel(self._anim_id)
+                            self._anim_id = None
                         self._clear_path_lines()
-                        self._animate_tour(tour, "#8A2BE2")
-                        self._update_results(self.lbl_2opt, tour, cost)
-                        self.info_lbl.config(text=f"[2-Opt Refinement] Optimized Cost: {cost * 3.2:.0f} meters")
-                        self.update()
-                        self._interruptible_pause(500)
                         
-        self.info_lbl.config(text="2-Opt optimization completed successfully!")
+                        # Draw static lines for the tour immediately to avoid animation interruption
+                        for k in range(N):
+                            u = tour[k]
+                            v = tour[(k+1)%N]
+                            path, _ = self.get_shortest_path(u, v)
+                            coords = []
+                            for nid in path:
+                                pos = self.nodes[nid]
+                                coords.extend([pos[0], pos[1]])
+                            if len(coords) >= 4:
+                                line = self.canvas.create_line(*coords, fill="#8A2BE2", width=3.5, smooth=False, tags="tour_line")
+                                self.path_lines.append(line)
+                                
+                        self.update()
+                        self._interruptible_pause(300)
+
+        self._update_results(self.lbl_2opt, tour, cost)
+        self.info_lbl.config(text=f"2-Opt done! Optimized Cost: {cost * 3.2:.0f} meters")
         self.is_running = False
     def _toggle_edit_mode(self):
         self.edit_mode = not getattr(self, "edit_mode", False)
@@ -2199,6 +2457,7 @@ class IsraelRoadTSPVisualizer(tk.Frame):
         if hasattr(self, "drag_node"):
             delattr(self, "drag_node")
             self._rebuild_graph_weights()
+            self._path_cache = {}
 
     def _rebuild_graph_weights(self):
         for u in self.graph:
@@ -2228,6 +2487,7 @@ class IsraelRoadTSPVisualizer(tk.Frame):
             del self.graph[node]
             for u in self.graph:
                 self.graph[u] = [(v, w) for v, w in self.graph[u] if v != node]
+            self._path_cache = {}
             self._draw_base_map()
 
     def _on_canvas_shift_click(self, event):
@@ -2252,6 +2512,7 @@ class IsraelRoadTSPVisualizer(tk.Frame):
                     self.graph[u].append((v, w))
                     self.graph[v].append((u, w))
             self.connect_node_start = None
+            self._path_cache = {}
             self._draw_base_map()
 
     def _save_graph_to_file(self):
@@ -2298,11 +2559,11 @@ class MainApp(tk.Tk):
         self.notebook.pack(expand=True, fill='both', padx=20, pady=10)
         
         self.tsp_tab = TSPVisualizer(self.notebook)
-        self.israel_tab = IsraelRoadTSPVisualizer(self.notebook)
+        self.israel_tab = EfalRoadTSPVisualizer(self.notebook)
         self.sort_tab = SortVisualizer(self.notebook)
         
         self.notebook.add(self.tsp_tab, text="Euclidean TSP")
-        self.notebook.add(self.israel_tab, text="Ramat Efal Friend's Router")
+        self.notebook.add(self.israel_tab, text="Efal Road Friend's Router")
         self.notebook.add(self.sort_tab, text="Array Sorting")
 
 if __name__ == "__main__":
