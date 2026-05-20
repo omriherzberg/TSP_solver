@@ -1,35 +1,36 @@
-# TSP + Sorting Visualization and Expermintation (C + Python Integration)
+# TSP + Sorting Visualization (C + Python Integration)
 
-# SUBMITTING FOR THE COMPETETION
 ---
 
 ### Student Details
-* **Student Name:** [Omri Herzberg]
-* **Course:** [C/C++]
-* **University:** [HUJI]
+* **Student Name:** Omri Herzberg
+* **Course:** C/C++
+* **University:** HUJI
 * **Date:** May 2026
 
 ---
 
 ## Project Overview
-This project is an advanced, hybrid application integrating **highly optimized C backend algorithms** with a **rich Tkinter-based Python GUI** via `ctypes`. The project visualizes fundamental algorithms in both **Travelling Salesperson Problem (TSP)** heuristics and **in-memory Array Sorting**, featuring interactive manipulation and live step-by-step state visualization.
+An advanced hybrid application integrating **highly optimized C backend algorithms** with a **rich Tkinter-based Python GUI** via `ctypes`. The project visualizes fundamental algorithms in both **Travelling Salesperson Problem (TSP)** heuristics and **in-memory Array Sorting**, featuring interactive manipulation and live step-by-step state visualization.
 
 ---
 
 ## Key Features
 
 ### 1. Euclidean TSP Visualizer
-* **Constructive Heuristics:** Nearest Neighbor, Greedy Edge-Insertion, and the 1.5-approximation **Christofides Algorithm** (with detailed MST & MWPM staging).
-* **Refinement Heuristics:** 1-Opt, 2-Opt, and Simulated Annealing (with custom temperature constraints).
+* **Constructive Heuristics:** Nearest Neighbor, Greedy Edge-Insertion, and the 1.5-approximation **Christofides Algorithm** (with detailed MST & MWPM staging, step-by-step node-by-node visualization).
+* **Refinement Heuristics:** 1-Opt (node relocation) and 2-Opt (edge uncrossing), both with color-coded live feedback — **Green** = initial tour, **Purple** flash = swap made, **Blue** = final improved tour.
+* **Simulated Annealing:** Configurable cooling rate and initial temperature ratio, with a live temperature-history chart.
 * **Lower Bound Computation:** Calculates Held-Karp style 1-Tree bounds with anchor-vertex selection.
-* **Responsive Control Panel:** Decoupled asynchronous callback loop preventing Tkinter window freezing during high-compute algorithm loops.
+* **Geometric Presets:** Circle, Clusters, and Grid node arrangements to highlight algorithmic differences.
+* **Responsive Control Panel:** Decoupled asynchronous C-to-Python callback loop preventing Tkinter freezing during high-throughput evaluation.
 
-### 2. Ramat Efal Friend's Router (Custom Topology Editor)
-* **Step-by-Step Algorithm Visualization:** Watch Nearest Neighbor, Greedy, and Christofides build their routes along real streets. Christofides shows the MST (green) and Matching (orange dashed) stages before the final tour.
-* **Performance Bar Chart:** Route Travel Cost panel displays a live bar chart comparing all algorithms that have been run, with 2-Opt savings shown as a purple stripe on top of its parent algorithm's bar.
-* **Interactive Graph Editing:** Double-click to place named nodes, click-and-drag to adjust, and `Shift + Click` to dynamically draw connections.
-* **Decoupled Configuration:** Read/write operations fully detached from the Python code and saved natively to a standalone `assets/ramat_efal_config.json` file.
-* **Quick Presets:** Custom 3-column quick-select layout bound to your designated interjunction coordinates.
+### 2. Ramat Efal Friend's Router (Road Graph TSP)
+* **Real Map Background:** Operates on a real PNG map of Ramat Efal with a pre-loaded road graph.
+* **Step-by-Step Algorithm Visualization:** Watch Nearest Neighbor and Greedy build roads edge-by-edge. Christofides visually shows **Stage 1 (MST, green)** and **Stage 2 (Odd Vertex Matching, orange dashed)** before drawing the final tour.
+* **Performance Bar Chart:** The Route Travel Cost panel displays a live bar chart comparing all algorithms that have been run. 2-Opt savings are shown as a **purple stripe** on top of the originating algorithm's bar.
+* **Named Presets:** Quick-add buttons for locations like Shula, Harpaz, Carrefour, My House, etc. The optimal path sequence shows real names, not node indices.
+* **Interactive Graph Editor:** A dedicated tab to double-click/drag/shift-click to modify the road network and save it to `assets/ramat_efal_config.json`.
 
 ### 3. Array Sorting Visualizer
 * **C-to-Python Rendering:** Visualizes Bubble Sort and Quick Sort executed in-place on C-memory structures, rendering pivots, swaps, and sorted sub-arrays in real time using native callback tracking.
@@ -40,47 +41,49 @@ This project is an advanced, hybrid application integrating **highly optimized C
 ```text
 ex_2_plus/
 ├── src/
-│   ├── c_core/                  # Core optimized C logic, sorting & TSP solvers
+│   ├── c_core/                  # Core optimized C logic: TSP solvers, Efal solver, sorting
 │   └── py_ui/                   # Tkinter visualizer frontend & ctypes bridge
-├── assets/                      # Node configurations & map graphic assets
-├── tests/                       # Integration test files (Pytest compatible)
-├── build/                       # Compiled dynamic libraries (.so / .dylib / .dll)
+├── assets/                      # Map image & road graph configuration (ramat_efal_config.json)
+├── tests/                       # Integration tests (Pytest) — 28 tests, all passing
+├── build/                       # Compiled dynamic libraries (auto-generated, git-ignored)
 ├── scripts/                     # Developer utility scripts
-├── compile.py                   # Cross-platform library compiler
-└── README.md                    # Project documentation & setup instructions
+├── compile.py                   # Cross-platform library compiler (macOS/Linux/Windows)
+└── README.md                    # This file
 ```
 
 ---
 
 ## Setup & How to Run
 
-### Prerequisite
-Ensure Python 3.11+ is installed on your machine.
+### Prerequisites
+* Python 3.11+
+* GCC or Clang (any modern C compiler on your PATH)
 
-### Compile Shared Libraries
-Since dynamic C libraries are machine-dependent, you must compile the shared libraries on your machine prior to running the code. We have included an automated, cross-platform build script:
+### Step 1 — Compile Shared Libraries
+Dynamic C libraries are machine-specific and **must be compiled before running**. Use the included cross-platform build script:
 ```bash
 python3 compile.py
 ```
-This script dynamically detects your OS (macOS, Linux, Windows) and compiles:
+This detects your OS and outputs:
 * `build/libbuslines.<ext>`
 * `build/libtsp.<ext>`
 * `build/libefaltsp.<ext>`
 * `build/libvisualize.<ext>`
 
-### Run the Application
-Start the main visualizer interface from the root directory:
+Where `<ext>` is `dylib` (macOS), `so` (Linux), or `dll` (Windows).
+
+### Step 2 — Run the Application
 ```bash
 python3 src/py_ui/visualize_ui.py
 ```
 
-### Run the CLI Processing Script (Bus Lines Sorting)
+### Run the CLI Script (Bus Lines Sorting)
 ```bash
 python3 src/py_ui/main.py
 ```
 
 ### Run Integration Tests
-Run the Pytest suite to validate logic correctness and FFI boundaries:
 ```bash
 pytest tests/
 ```
+All 28 tests should pass on a clean compile.
