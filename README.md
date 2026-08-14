@@ -65,7 +65,12 @@ Install the required Python packages (currently just pytest for testing):
 pip install -r requirements.txt
 ```
 
-### Step 2 — Compile Shared Libraries
+### Step 2 — Run the Application
+
+**Option A: macOS Users (Quick Launch)**
+Simply double-click the `TSP Solver.command` file in Finder! This script automatically compiles all the C libraries in the background and launches the graphical interface instantly. 
+
+**Option B: Linux & Windows Users (Terminal)**
 Dynamic C libraries are machine-specific and **must be compiled before running**. Use the included cross-platform build script:
 ```bash
 python3 compile.py
@@ -78,11 +83,7 @@ This detects your OS and outputs:
 
 Where `<ext>` is `dylib` (macOS), `so` (Linux), or `dll` (Windows).
 
-### Step 3 — Run the Application
-**For macOS users:** Simply double-click the `Launch_Visualizer.command` file in Finder! This will automatically compile the libraries and start the application for you without needing the terminal.
-
-**For Linux/Windows users:**
-Run the UI via terminal:
+Once compiled, launch the UI via terminal:
 ```bash
 python3 src/py_ui/visualize_ui.py
 ```
