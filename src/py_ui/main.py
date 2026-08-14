@@ -98,17 +98,92 @@ def process_buses(inputs, sort_type):
         bus = bus_array[i]
         print(f"{bus.name.decode('utf-8')},{bus.distance},{bus.duration},{bus.frequency}")
 
+import sys
+
 if __name__ == "__main__":
-    print("--- Using C Shared Library via Python ctypes ---\n")
+    if len(sys.argv) != 2:
+        print("Usage: by_name / by_distance / by_frequency / by_duration")
+        sys.exit(1)
+        
+    sort_type = sys.argv[1]
+    if sort_type not in ["by_name", "by_distance", "by_frequency", "by_duration", "test"]:
+        print("Usage: by_name / by_distance / by_frequency / by_duration")
+        sys.exit(1)
+
+    num_buses = 0
+    while num_buses <= 0:
+        print("Enter number of lines. Then enter")
+        try:
+            line = sys.stdin.readline()
+            if not line:
+                sys.exit(0)
+            num_buses = int(line.strip())
+            if num_buses <= 0:
+                print("Error: Number of lines should be a positive integer")
+        except ValueError:
+            print("Error: Number of lines should be a positive integer")
+
+    import re
     
-    test_inputs = [
-        "busa,500,20,5",
-        "busc,100,10,2",
-        "busb,200,15,3"
-    ]
-    
-    print("Results after C Quick Sort (by_distance):")
+    def check_bus_line(line_str):
+        parts = line_str.split(',')
+        if len(parts) != 4:
+            print("Error: line name")
+            return False
+            
+        name, dist, dur, freq = parts
+        
+        if len(name) > 20 or not re.match(r'^[a-z0-9]*$', name):
+            print("Error: line name")
+            return False
+            
+        try:
+            dist = int(dist)
+            if not (0 <= dist <= 1000):
+                print("Error: distance should be an integer between 0 and 1000 (includes)")
+                return False
+        except ValueError:
+            print("Error: distance should be an integer between 0 and 1000 (includes)")
+            return False
+            
+        try:
+            dur = int(dur)
+            if not (10 <= dur <= 100):
+                print("Error: duration should be an integer between 10 and 100 (includes)")
+                return False
+        except ValueError:
+            print("Error: duration should be an integer between 10 and 100 (includes)")
+            return False
+            
+        try:
+            freq = int(freq)
+            if not (1 <= freq <= 50):
+                print("Error: frequency should be an integer between 1 and 50 (includes)")
+                return False
+        except ValueError:
+            print("Error: frequency should be an integer between 1 and 50 (includes)")
+            return False
+            
+        return True
+
+    user_inputs = []
+    cur_buses = 0
+    while cur_buses < num_buses:
+        print("Enter line info. Then enter")
+        line = sys.stdin.readline()
+        if not line:
+            sys.exit(0)
+        line = line.strip()
+        if check_bus_line(line):
+            user_inputs.append(line)
+            cur_buses += 1
+
+    if sort_type == "test":
+        print("Test mode is not currently supported in the Python CLI wrapper.")
+        sys.exit(0)
+
     try:
-        process_buses(test_inputs, "by_distance")
+        process_buses(user_inputs, sort_type)
     except ValueError as e:
         print(f"Invalid Input! Error processing bus data: {e}")
+

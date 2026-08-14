@@ -100,6 +100,7 @@ class TSPVisualizer(tk.Frame):
         self.canvas = tk.Canvas(self, width=self.canvas_width, height=self.canvas_height, bg="#1e1e1e", highlightthickness=0)
         self.canvas.pack(pady=5)
         self.canvas.bind("<Button-1>", self.on_canvas_click)
+        self.canvas.bind("<Double-Button-1>", self.on_canvas_click)
         
         self.info_label = tk.Label(self, text="Ready for TSP. Click nodes to play, or run an algorithm.", font=("Helvetica", 16), bg="#2b2b2b", fg="#a9b7c6")
         self.info_label.pack(pady=5)
@@ -422,8 +423,8 @@ class TSPVisualizer(tk.Frame):
         if len(self.user_path) > self.num_elements: return
             
         clicked_idx = -1
-        # Dynamic click radius
-        min_dist = 25 if self.num_elements <= 30 else 10
+        # Dynamic click radius (increased for easier clicking)
+        min_dist = 60 if self.num_elements <= 30 else 25
         
         for i in range(self.num_elements):
             x, y = self.c_array[i].x, self.c_array[i].y
@@ -431,7 +432,6 @@ class TSPVisualizer(tk.Frame):
             if dist < min_dist:
                 min_dist = dist
                 clicked_idx = i
-                break
                 
         if clicked_idx != -1:
             if len(self.user_path) == 0:
@@ -1238,6 +1238,28 @@ class TSPVisualizer(tk.Frame):
                     fg="#FFD700"
                 )
                 self.update()
+                
+            elif event_type == 9:  # EVENT_MWPM_DELEGATE
+                import networkx as nx
+                import math
+                G = nx.Graph()
+                num_odds = path_len
+                odds = [path_ptr[i] for i in range(num_odds)]
+                
+                for i in range(num_odds):
+                    for j in range(i + 1, num_odds):
+                        u = odds[i]
+                        v = odds[j]
+                        dx = self.c_array[u].x - self.c_array[v].x
+                        dy = self.c_array[u].y - self.c_array[v].y
+                        dist = math.sqrt(dx*dx + dy*dy)
+                        G.add_edge(i, j, weight=dist)
+                        
+                matching = nx.min_weight_matching(G, weight='weight')
+                for (u, v) in matching:
+                    path_ptr[num_odds + u] = v
+                    path_ptr[num_odds + v] = u
+                return 0
                 
             return 0
         except Exception as e:
@@ -2470,7 +2492,10 @@ class EfalRoadTSPVisualizer(tk.Frame):
             self.graph[u] = new_edges
 
     def _on_canvas_double_click(self, event):
-        if not getattr(self, "edit_mode", False) or self.is_running: return
+        if self.is_running: return
+        if not getattr(self, "edit_mode", False):
+            self._on_canvas_click(event)
+            return
         new_id = max(self.nodes.keys()) + 1 if self.nodes else 0
         self.nodes[new_id] = (event.x, event.y)
         self.node_names[new_id] = f"New Node {new_id}"
